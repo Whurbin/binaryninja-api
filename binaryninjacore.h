@@ -389,6 +389,7 @@ extern "C"
 		BaseStructureNameToken = 37,
 		BaseStructureSeparatorToken = 38,
 		BraceToken = 39,
+		CollapsedInformationToken = 40,
 		// The following are output by the analysis system automatically, these should
 		// not be used directly by the architecture plugins
 		CodeSymbolToken = 64,
