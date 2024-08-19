@@ -323,6 +323,13 @@ class BINARYNINJAUIAPI UIContextNotification
 		(void)ctx;
 		(void)action;
 	}
+
+	virtual void OnContextMenuCreated(UIContext* context, View* view, Menu& menu)
+	{
+		(void)context;
+		(void)view;
+		(void)menu;
+	}
 };
 
 /*!
@@ -528,6 +535,7 @@ public:
 	void NotifyOnAddressChange(ViewFrame* frame, View* view, const ViewLocation& location);
 	void updateCrossReferences(ViewFrame* frame, View* view, const SelectionInfoForXref& selection);
 	void NotifyOnActionExecuted(UIActionHandler* handler, const QString& name, const UIActionContext& ctx, std::function<void(const UIActionContext&)>& action);
+	void NotifyOnContextMenuCreated(View* view, Menu& menu);
 
 	virtual void findAll(const BinaryNinja::FindParameters& params);
 
