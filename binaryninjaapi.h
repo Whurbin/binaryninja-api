@@ -2108,7 +2108,7 @@ namespace BinaryNinja {
 
 			@threadunsafe
 		*/
-		std::string ToEscapedString(bool nullTerminates = false) const;
+		std::string ToEscapedString(bool nullTerminates = false, bool escapePrintable = false) const;
 
 		/*! Create a DataBuffer from a given escaped string.
 
@@ -2332,7 +2332,9 @@ namespace BinaryNinja {
 		InstructionTextToken(const BNInstructionTextToken& token);
 
 		InstructionTextToken WithConfidence(uint8_t conf);
+		static void ConvertInstructionTextToken(const InstructionTextToken& token, BNInstructionTextToken* result);
 		static BNInstructionTextToken* CreateInstructionTextTokenList(const std::vector<InstructionTextToken>& tokens);
+		static void FreeInstructionTextToken(BNInstructionTextToken* token);
 		static void FreeInstructionTextTokenList(
 		    BNInstructionTextToken* tokens, size_t count);
 		static std::vector<InstructionTextToken> ConvertAndFreeInstructionTextTokenList(
@@ -3889,6 +3891,24 @@ namespace BinaryNinja {
 		NameSpace GetNameSpace() const;
 
 		static Ref<Symbol> ImportedFunctionFromImportAddressSymbol(Symbol* sym, uint64_t addr);
+	};
+
+	struct FunctionViewType
+	{
+		BNFunctionGraphType type;
+		std::string name;
+
+		FunctionViewType() : type(NormalFunctionGraph) {}
+		FunctionViewType(BNFunctionGraphType viewType);
+		FunctionViewType(const std::string& langName) : type(HighLevelLanguageRepresentationFunctionGraph), name(langName) {}
+		FunctionViewType(const BNFunctionViewType& viewType);
+
+		BNFunctionViewType ToAPIObject() const;
+
+		BNFunctionGraphType GetBackingILType() const;
+
+		bool operator==(const FunctionViewType& other) const;
+		bool operator!=(const FunctionViewType& other) const;
 	};
 
 	// TODO: This describes how the xref source references the target
@@ -6296,29 +6316,29 @@ namespace BinaryNinja {
 		bool FindNextData(
 		    uint64_t start, const DataBuffer& data, uint64_t& result, BNFindFlag flags = FindCaseSensitive);
 		bool FindNextText(uint64_t start, const std::string& data, uint64_t& result, Ref<DisassemblySettings> settings,
-		    BNFindFlag flags = FindCaseSensitive, BNFunctionGraphType graph = NormalFunctionGraph);
+		    BNFindFlag flags = FindCaseSensitive, const FunctionViewType& viewType = NormalFunctionGraph);
 		bool FindNextConstant(uint64_t start, uint64_t constant, uint64_t& result, Ref<DisassemblySettings> settings,
-		    BNFunctionGraphType graph = NormalFunctionGraph);
+		    const FunctionViewType& viewType = NormalFunctionGraph);
 
 		bool FindNextData(uint64_t start, uint64_t end, const DataBuffer& data, uint64_t& addr, BNFindFlag flags,
 		    const std::function<bool(size_t current, size_t total)>& progress);
 		bool FindNextText(uint64_t start, uint64_t end, const std::string& data, uint64_t& addr,
-		    Ref<DisassemblySettings> settings, BNFindFlag flags, BNFunctionGraphType graph,
+		    Ref<DisassemblySettings> settings, BNFindFlag flags, const FunctionViewType& viewType,
 		    const std::function<bool(size_t current, size_t total)>& progress);
 		bool FindNextConstant(uint64_t start, uint64_t end, uint64_t constant, uint64_t& addr,
-		    Ref<DisassemblySettings> settings, BNFunctionGraphType graph,
+		    Ref<DisassemblySettings> settings, const FunctionViewType& viewType,
 		    const std::function<bool(size_t current, size_t total)>& progress);
 
 		bool FindAllData(uint64_t start, uint64_t end, const DataBuffer& data, BNFindFlag flags,
 		    const std::function<bool(size_t current, size_t total)>& progress,
 		    const std::function<bool(uint64_t addr, const DataBuffer& match)>& matchCallback);
 		bool FindAllText(uint64_t start, uint64_t end, const std::string& data, Ref<DisassemblySettings> settings,
-		    BNFindFlag flags, BNFunctionGraphType graph,
+		    BNFindFlag flags, const FunctionViewType& viewType,
 		    const std::function<bool(size_t current, size_t total)>& progress,
 		    const std::function<bool(uint64_t addr, const std::string& match, const LinearDisassemblyLine& line)>&
 		        matchCallback);
 		bool FindAllConstant(uint64_t start, uint64_t end, uint64_t constant, Ref<DisassemblySettings> settings,
-		    BNFunctionGraphType graph, const std::function<bool(size_t current, size_t total)>& progress,
+		    const FunctionViewType& viewType, const std::function<bool(size_t current, size_t total)>& progress,
 		    const std::function<bool(uint64_t addr, const LinearDisassemblyLine& line)>& matchCallback);
 
 		bool Search(const std::string& query, const std::function<bool(uint64_t offset, const DataBuffer& buffer)>& otherCallback);
@@ -6752,7 +6772,10 @@ namespace BinaryNinja {
 		bool UserGlobalPointerValueSet() const;
 		void ClearUserGlobalPointerValue();
 		void SetUserGlobalPointerValue(const Confidence<RegisterValue>& value);
-	};
+
+		std::optional<std::pair<std::string, BNStringType>> StringifyUnicodeData(Architecture* arch,
+			const DataBuffer& buffer, bool allowShortStrings = false);
+};
 
 	class MemoryMap
 	{
@@ -9399,6 +9422,11 @@ namespace BinaryNinja {
 		Ref<Structure> WithReplacedStructure(Structure* from, Structure* to);
 		Ref<Structure> WithReplacedEnumeration(Enumeration* from, Enumeration* to);
 		Ref<Structure> WithReplacedNamedTypeReference(NamedTypeReference* from, NamedTypeReference* to);
+
+		bool ResolveMemberOrBaseMember(BinaryView* data, uint64_t offset, size_t size,
+			const std::function<void(NamedTypeReference* baseName, Structure* s, size_t memberIndex,
+				uint64_t structOffset, uint64_t adjustedOffset, const StructureMember& member)>& resolveFunc,
+			std::optional<size_t> memberIndexHint = std::nullopt);
 	};
 
 	/*! StructureBuilder is a convenience class used for building Structure Types.
@@ -10316,7 +10344,7 @@ namespace BinaryNinja {
 		ConstantData(BNRegisterValueType state, uint64_t value);
 		ConstantData(BNRegisterValueType state, uint64_t value, size_t size, Ref<Function> func = nullptr);
 
-		DataBuffer ToDataBuffer() const;
+		std::pair<DataBuffer, BNBuiltinType> ToDataBuffer() const;
 		RegisterValue ToRegisterValue() const;
 	};
 
@@ -10572,7 +10600,7 @@ namespace BinaryNinja {
 		std::set<size_t> GetLowLevelILInstructionsForAddress(Architecture* arch, uint64_t addr);
 		std::vector<size_t> GetLowLevelILExitsForInstruction(Architecture* arch, uint64_t addr);
 
-		DataBuffer GetConstantData(BNRegisterValueType state, uint64_t value, size_t size = 0);
+		std::pair<DataBuffer, BNBuiltinType> GetConstantData(BNRegisterValueType state, uint64_t value, size_t size = 0);
 
 		RegisterValue GetRegisterValueAtInstruction(Architecture* arch, uint64_t addr, uint32_t reg);
 		RegisterValue GetRegisterValueAfterInstruction(Architecture* arch, uint64_t addr, uint32_t reg);
@@ -10662,8 +10690,9 @@ namespace BinaryNinja {
 			\return The HLIL for this Function if it's available.
 		*/
 		Ref<HighLevelILFunction> GetHighLevelILIfAvailable() const;
-		Ref<LanguageRepresentationFunction> GetLanguageRepresentation() const;
-		Ref<LanguageRepresentationFunction> GetLanguageRepresentationIfAvailable() const;
+		Ref<LanguageRepresentationFunction> GetLanguageRepresentation(const std::string& language = "Pseudo C") const;
+		Ref<LanguageRepresentationFunction> GetLanguageRepresentationIfAvailable(
+			const std::string& language = "Pseudo C") const;
 
 		Ref<Type> GetType() const;
 		Confidence<Ref<Type>> GetReturnType() const;
@@ -10704,7 +10733,7 @@ namespace BinaryNinja {
 		void ApplyImportedTypes(Symbol* sym, Ref<Type> type = nullptr);
 		void ApplyAutoDiscoveredType(Type* type);
 
-		Ref<FlowGraph> CreateFunctionGraph(BNFunctionGraphType type, DisassemblySettings* settings = nullptr);
+		Ref<FlowGraph> CreateFunctionGraph(const FunctionViewType& type, DisassemblySettings* settings = nullptr);
 
 		std::map<int64_t, std::vector<VariableNameAndType>> GetStackLayout();
 		void CreateAutoStackVariable(int64_t offset, const Confidence<Ref<Type>>& type, const std::string& name);
@@ -13128,6 +13157,7 @@ namespace BinaryNinja {
 	};
 
 	struct HighLevelILInstruction;
+	class HighLevelILTokenEmitter;
 
 	/*!
 		\ingroup highlevelil
@@ -13360,6 +13390,8 @@ namespace BinaryNinja {
 		bool IsSSAVarLive(const SSAVariable& var) const;
 		bool IsSSAVarLiveAt(const SSAVariable& var, const size_t instr) const;
 		bool IsVarLiveAt(const Variable& var, const size_t instr) const;
+		static bool HasSideEffects(const HighLevelILInstruction& instr);
+		static BNScopeType GetExprScopeType(const HighLevelILInstruction& instr);
 
 		std::set<size_t> GetVariableSSAVersions(const Variable& var) const;
 		std::set<size_t> GetVariableDefinitions(const Variable& var) const;
@@ -13407,15 +13439,110 @@ namespace BinaryNinja {
 
 		size_t GetExprIndexForLabel(uint64_t label);
 		std::set<size_t> GetUsesForLabel(uint64_t label);
+
+		static void AddSizeToken(size_t size, BNInstructionTextTokenType type, HighLevelILTokenEmitter& tokens);
+		static void AddFloatSizeToken(size_t size, BNInstructionTextTokenType type, HighLevelILTokenEmitter& tokens);
+		void AddVarTextToken(const Variable& var, HighLevelILTokenEmitter& tokens,
+			const HighLevelILInstruction& instr, size_t size);
+		void AddSSAVarTextToken(const SSAVariable& var, HighLevelILTokenEmitter& tokens,
+			const HighLevelILInstruction& instr, size_t size);
+		void AddSSAMemoryTextToken(size_t memVersion, HighLevelILTokenEmitter& tokens);
+		void AddIntegerTextToken(const HighLevelILInstruction& instr, int64_t val, size_t size,
+					 HighLevelILTokenEmitter& tokens);
+		void AddArrayIndexToken(const HighLevelILInstruction& instr, int64_t val, size_t size,
+					 HighLevelILTokenEmitter& tokens, uint64_t address = 0);
+		BNSymbolDisplayResult AddPointerTextToken(const HighLevelILInstruction& instr, int64_t val,
+			HighLevelILTokenEmitter& tokens, DisassemblySettings* settings, BNSymbolDisplayType symbolDisplay,
+			BNOperatorPrecedence precedence);
+		void AddConstantTextToken(const HighLevelILInstruction& instr, int64_t val, size_t size,
+			HighLevelILTokenEmitter& tokens, DisassemblySettings* settings, BNOperatorPrecedence precedence);
 	};
 
+	/*!
+		\ingroup highlevelil
+	*/
 	class LanguageRepresentationFunction :
 	    public CoreRefCountObject<BNLanguageRepresentationFunction, BNNewLanguageRepresentationFunctionReference,
 	        BNFreeLanguageRepresentationFunction>
 	{
-	  public:
-		LanguageRepresentationFunction(Architecture* arch, Function* func = nullptr);
+	public:
+		LanguageRepresentationFunction(Architecture* arch, Function* func, HighLevelILFunction* highLevelIL);
 		LanguageRepresentationFunction(BNLanguageRepresentationFunction* func);
+
+		std::vector<DisassemblyTextLine> GetExprText(const HighLevelILInstruction& instr, DisassemblySettings* settings,
+			bool asFullAst = true, BNOperatorPrecedence precedence = TopLevelOperatorPrecedence, bool statement = false);
+		std::vector<DisassemblyTextLine> GetLines(
+			const HighLevelILInstruction& instr, DisassemblySettings* settings, bool asFullAst = true);
+
+		std::vector<DisassemblyTextLine> GetDisassemblyText(BasicBlock* block, DisassemblySettings* settings);
+		BNHighlightColor GetHighlight(BasicBlock* block);
+
+		Architecture* GetArchitecture() const;
+		Function* GetFunction() const;
+		HighLevelILFunction* GetHighLevelILFunction() const;
+
+	protected:
+		virtual void InitTokenEmitter(HighLevelILTokenEmitter& tokens);
+		virtual void GetExprText(const HighLevelILInstruction& instr, HighLevelILTokenEmitter& tokens,
+			DisassemblySettings* settings, bool asFullAst = true,
+			BNOperatorPrecedence precedence = TopLevelOperatorPrecedence, bool statement = false) = 0;
+		virtual void BeginLines(const HighLevelILInstruction& instr, HighLevelILTokenEmitter& tokens);
+		virtual void EndLines(const HighLevelILInstruction& instr, HighLevelILTokenEmitter& tokens);
+
+	private:
+		static void FreeCallback(void* ctxt);
+		static void InitTokenEmitterCallback(void* ctxt, BNHighLevelILTokenEmitter* tokens);
+		static void GetExprTextCallback(void* ctxt, BNHighLevelILFunction* il, size_t exprIndex,
+			BNHighLevelILTokenEmitter* tokens, BNDisassemblySettings* settings, bool asFullAst,
+			BNOperatorPrecedence precedence, bool statement);
+		static void BeginLinesCallback(void* ctxt, BNHighLevelILFunction* il, size_t exprIndex,
+			BNHighLevelILTokenEmitter* tokens);
+		static void EndLinesCallback(void* ctxt, BNHighLevelILFunction* il, size_t exprIndex,
+			BNHighLevelILTokenEmitter* tokens);
+	};
+
+	/*!
+		\ingroup highlevelil
+	*/
+	class CoreLanguageRepresentationFunction: public LanguageRepresentationFunction
+	{
+	public:
+		CoreLanguageRepresentationFunction(BNLanguageRepresentationFunction* func);
+
+	protected:
+		void GetExprText(const HighLevelILInstruction& instr, HighLevelILTokenEmitter& tokens,
+			DisassemblySettings* settings, bool asFullAst = true,
+			BNOperatorPrecedence precedence = TopLevelOperatorPrecedence, bool statement = false) override;
+	};
+
+	/*!
+		\ingroup highlevelil
+	*/
+	class LanguageRepresentationFunctionType : public StaticCoreRefCountObject<BNLanguageRepresentationFunctionType>
+	{
+		std::string m_nameForRegister;
+
+	public:
+		LanguageRepresentationFunctionType(const std::string& name);
+		LanguageRepresentationFunctionType(BNLanguageRepresentationFunctionType* type);
+
+		std::string GetName() const;
+		virtual Ref<LanguageRepresentationFunction> Create(Architecture* arch, Function* owner, HighLevelILFunction* highLevelIL) = 0;
+
+		static void Register(LanguageRepresentationFunctionType* type);
+		static Ref<LanguageRepresentationFunctionType> GetByName(const std::string& name);
+		static std::vector<Ref<LanguageRepresentationFunctionType>> GetTypes();
+
+	private:
+		static BNLanguageRepresentationFunction* CreateCallback(
+			void* ctxt, BNArchitecture* arch, BNFunction* owner, BNHighLevelILFunction* highLevelIL);
+	};
+
+	class CoreLanguageRepresentationFunctionType : public LanguageRepresentationFunctionType
+	{
+	public:
+		CoreLanguageRepresentationFunctionType(BNLanguageRepresentationFunctionType* type);
+		Ref<LanguageRepresentationFunction> Create(Architecture* arch, Function* owner, HighLevelILFunction* highLevelIL) override;
 	};
 
 	/*!
@@ -16350,6 +16477,12 @@ namespace BinaryNinja {
 		void ResetDeduplicatedComments();
 
 		bool AddSymbolToken(std::vector<InstructionTextToken>& tokens, uint64_t addr, size_t size, size_t operand);
+		static BNSymbolDisplayResult AddSymbolTokenStatic(
+			std::vector<InstructionTextToken>& tokens, uint64_t addr, size_t size, size_t operand,
+			BinaryView* data, size_t maxSymbolWidth, Function* func, uint8_t confidence = BN_FULL_CONFIDENCE,
+			BNSymbolDisplayType symbolDisplay = DisplaySymbolOnly,
+			BNOperatorPrecedence precedence = TopLevelOperatorPrecedence,
+			uint64_t instrAddr = -1, uint64_t exprIndex = -1);
 		void AddStackVariableReferenceTokens(
 		    std::vector<InstructionTextToken>& tokens, const StackVariableReference& ref);
 
@@ -16361,6 +16494,7 @@ namespace BinaryNinja {
 		    bool hasAutoAnnotations, const std::string& leadingSpaces = "  ", const std::string& indentSpaces = "");
 		static std::string GetDisplayStringForInteger(Ref<BinaryView> binaryView, BNIntegerDisplayType type,
 		    uint64_t value, size_t inputWidth, bool isSigned = true);
+		static std::string GetStringLiteralPrefix(BNStringType type);
 	};
 
 	/*!
@@ -16418,7 +16552,8 @@ namespace BinaryNinja {
 		static Ref<LinearViewObject> CreateMappedMediumLevelILSSAForm(BinaryView* view, DisassemblySettings* settings);
 		static Ref<LinearViewObject> CreateHighLevelIL(BinaryView* view, DisassemblySettings* settings);
 		static Ref<LinearViewObject> CreateHighLevelILSSAForm(BinaryView* view, DisassemblySettings* settings);
-		static Ref<LinearViewObject> CreateLanguageRepresentation(BinaryView* view, DisassemblySettings* settings);
+		static Ref<LinearViewObject> CreateLanguageRepresentation(BinaryView* view, DisassemblySettings* settings,
+			const std::string& language = "Pseudo C");
 		static Ref<LinearViewObject> CreateDataOnly(BinaryView* view, DisassemblySettings* settings);
 
 		static Ref<LinearViewObject> CreateSingleFunctionDisassembly(Function* func, DisassemblySettings* settings);
@@ -16437,7 +16572,7 @@ namespace BinaryNinja {
 		static Ref<LinearViewObject> CreateSingleFunctionHighLevelILSSAForm(
 		    Function* func, DisassemblySettings* settings);
 		static Ref<LinearViewObject> CreateSingleFunctionLanguageRepresentation(
-		    Function* func, DisassemblySettings* settings);
+		    Function* func, DisassemblySettings* settings, const std::string& language = "Pseudo C");
 	};
 
 	/*!
@@ -16514,7 +16649,7 @@ namespace BinaryNinja {
 	{
 		BNFindType type;
 		BNFindRangeType rangeType;
-		BNFunctionGraphType ilType;
+		FunctionViewType ilType;
 		std::string string;
 		BNFindFlag flags;
 		bool findAll;
@@ -17836,6 +17971,68 @@ namespace BinaryNinja {
 			\return true if aborted by user, false otherwise
 		 */
 		bool IsAborted();
+	};
+
+	/*!
+		\ingroup highlevelil
+	*/
+	class HighLevelILTokenEmitter:
+		public CoreRefCountObject<BNHighLevelILTokenEmitter, BNNewHighLevelILTokenEmitterReference, BNFreeHighLevelILTokenEmitter>
+	{
+	public:
+		HighLevelILTokenEmitter(BNHighLevelILTokenEmitter* emitter);
+
+		class CurrentExprGuard
+		{
+			HighLevelILTokenEmitter* m_parent;
+			BNTokenEmitterExpr m_expr;
+
+			CurrentExprGuard(const CurrentExprGuard&) = delete;
+			CurrentExprGuard& operator=(const CurrentExprGuard&) = delete;
+
+		public:
+			CurrentExprGuard(HighLevelILTokenEmitter& parent, const BNTokenEmitterExpr& expr);
+			~CurrentExprGuard();
+		};
+
+		template <typename... Args>
+		void Append(Args&&... args)
+		{
+			InstructionTextToken token(std::forward<Args>(args)...);
+			BNInstructionTextToken converted;
+			InstructionTextToken::ConvertInstructionTextToken(token, &converted);
+			BNHighLevelILTokenEmitterAppend(m_object, &converted);
+			InstructionTextToken::FreeInstructionTextToken(&converted);
+		}
+
+		void NewLine();
+		void IncreaseIndent();
+		void DecreaseIndent();
+		void ScopeSeparator();
+		void BeginScope(BNScopeType scopeType);
+		void EndScope(BNScopeType scopeType);
+		void ScopeContinuation(bool forceSameLine);
+		void FinalizeScope();
+		void NoIndentForThisLine();
+		void BeginForceZeroConfidence();
+		void EndForceZeroConfidence();
+		CurrentExprGuard SetCurrentExpr(const HighLevelILInstruction& expr);
+		void Finalize();
+		void AppendOpenParen();     // (
+		void AppendCloseParen();    // )
+		void AppendOpenBracket();   // [
+		void AppendCloseBracket();  // ]
+		void AppendOpenBrace();     // {
+		void AppendCloseBrace();    // }
+		void AppendSemicolon();
+
+		std::vector<InstructionTextToken> GetCurrentTokens() const;
+
+		void SetBracesRequired(BNBraceRequirement required);
+		void SetBracesAroundSwitchCases(bool braces);
+		void SetSimpleScopeAllowed(bool allowed);
+
+		std::vector<DisassemblyTextLine> GetLines() const;
 	};
 }  // namespace BinaryNinja
 

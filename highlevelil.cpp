@@ -341,6 +341,18 @@ bool HighLevelILFunction::IsVarLiveAt(const Variable& var, const size_t instr) c
 }
 
 
+bool HighLevelILFunction::HasSideEffects(const HighLevelILInstruction& instr)
+{
+	return BNHighLevelILHasSideEffects(instr.function->GetObject(), instr.exprIndex);
+}
+
+
+BNScopeType HighLevelILFunction::GetExprScopeType(const HighLevelILInstruction& instr)
+{
+	return BNGetHighLevelILExprScopeType(instr.function->GetObject(), instr.exprIndex);
+}
+
+
 set<size_t> HighLevelILFunction::GetVariableSSAVersions(const Variable& var) const
 {
 	size_t count;
@@ -566,5 +578,256 @@ set<size_t> HighLevelILFunction::GetUsesForLabel(uint64_t label)
 		result.insert(uses[i]);
 
 	BNFreeILInstructionList(uses);
+	return result;
+}
+
+
+void HighLevelILFunction::AddSizeToken(size_t size, BNInstructionTextTokenType type, HighLevelILTokenEmitter& tokens)
+{
+	BNAddHighLevelILSizeToken(size, type, tokens.GetObject());
+}
+
+
+void HighLevelILFunction::AddFloatSizeToken(size_t size, BNInstructionTextTokenType type, HighLevelILTokenEmitter& tokens)
+{
+	BNAddHighLevelILFloatSizeToken(size, type, tokens.GetObject());
+}
+
+
+void HighLevelILFunction::AddVarTextToken(const Variable& var, HighLevelILTokenEmitter& tokens,
+	const HighLevelILInstruction& instr, size_t size)
+{
+	BNAddHighLevelILVarTextToken(m_object, &var, tokens.GetObject(), instr.exprIndex, size);
+}
+
+
+void HighLevelILFunction::AddSSAVarTextToken(const SSAVariable& var, HighLevelILTokenEmitter& tokens,
+	const HighLevelILInstruction& instr, size_t size)
+{
+	BNAddHighLevelILSSAVarTextToken(m_object, &var.var, var.version, tokens.GetObject(), instr.exprIndex, size);
+}
+
+
+void HighLevelILFunction::AddSSAMemoryTextToken(size_t memVersion, HighLevelILTokenEmitter& tokens)
+{
+    BNAddHighLevelILSSAMemoryTextToken(m_object, memVersion, tokens.GetObject());
+}
+
+
+void HighLevelILFunction::AddIntegerTextToken(const HighLevelILInstruction& instr, int64_t val, size_t size,
+	HighLevelILTokenEmitter& tokens)
+{
+	BNAddHighLevelILIntegerTextToken(m_object, instr.exprIndex, val, size, tokens.GetObject());
+}
+
+
+void HighLevelILFunction::AddArrayIndexToken(const HighLevelILInstruction& instr, int64_t val, size_t size,
+	HighLevelILTokenEmitter& tokens, uint64_t address)
+{
+	BNAddHighLevelILArrayIndexToken(m_object, instr.exprIndex, val, size, tokens.GetObject(), address);
+}
+
+
+BNSymbolDisplayResult HighLevelILFunction::AddPointerTextToken(const HighLevelILInstruction& instr, int64_t val,
+	HighLevelILTokenEmitter& tokens, DisassemblySettings* settings, BNSymbolDisplayType symbolDisplay,
+	BNOperatorPrecedence precedence)
+{
+	return BNAddHighLevelILPointerTextToken(m_object, instr.exprIndex, val, tokens.GetObject(),
+        settings ? settings->GetObject() : nullptr, symbolDisplay, precedence);
+}
+
+
+void HighLevelILFunction::AddConstantTextToken(const HighLevelILInstruction& instr, int64_t val, size_t size,
+	HighLevelILTokenEmitter& tokens, DisassemblySettings* settings, BNOperatorPrecedence precedence)
+{
+	BNAddHighLevelILConstantTextToken(m_object, instr.exprIndex, val, size, tokens.GetObject(),
+        settings ? settings->GetObject() : nullptr, precedence);
+}
+
+
+HighLevelILTokenEmitter::CurrentExprGuard::CurrentExprGuard(HighLevelILTokenEmitter& parent, const BNTokenEmitterExpr& expr):
+	m_parent(&parent)
+{
+	m_expr = BNHighLevelILTokenEmitterSetCurrentExpr(m_parent->m_object, expr);
+}
+
+
+HighLevelILTokenEmitter::CurrentExprGuard::~CurrentExprGuard()
+{
+	BNHighLevelILTokenEmitterRestoreCurrentExpr(m_parent->m_object, m_expr);
+}
+
+
+HighLevelILTokenEmitter::HighLevelILTokenEmitter(BNHighLevelILTokenEmitter* emitter)
+{
+	m_object = emitter;
+}
+
+
+void HighLevelILTokenEmitter::NewLine()
+{
+	BNHighLevelILTokenEmitterNewLine(m_object);
+}
+
+
+void HighLevelILTokenEmitter::IncreaseIndent()
+{
+	BNHighLevelILTokenEmitterIncreaseIndent(m_object);
+}
+
+
+void HighLevelILTokenEmitter::DecreaseIndent()
+{
+	BNHighLevelILTokenEmitterDecreaseIndent(m_object);
+}
+
+
+void HighLevelILTokenEmitter::ScopeSeparator()
+{
+	BNHighLevelILTokenEmitterScopeSeparator(m_object);
+}
+
+
+void HighLevelILTokenEmitter::BeginScope(BNScopeType scopeType)
+{
+	BNHighLevelILTokenEmitterBeginScope(m_object, scopeType);
+}
+
+
+void HighLevelILTokenEmitter::EndScope(BNScopeType scopeType)
+{
+	BNHighLevelILTokenEmitterEndScope(m_object, scopeType);
+}
+
+
+void HighLevelILTokenEmitter::ScopeContinuation(bool forceSameLine)
+{
+	BNHighLevelILTokenEmitterScopeContinuation(m_object, forceSameLine);
+}
+
+
+void HighLevelILTokenEmitter::FinalizeScope()
+{
+	BNHighLevelILTokenEmitterFinalizeScope(m_object);
+}
+
+
+void HighLevelILTokenEmitter::NoIndentForThisLine()
+{
+	BNHighLevelILTokenEmitterNoIndentForThisLine(m_object);
+}
+
+
+void HighLevelILTokenEmitter::BeginForceZeroConfidence()
+{
+	BNHighLevelILTokenEmitterBeginForceZeroConfidence(m_object);
+}
+
+
+void HighLevelILTokenEmitter::EndForceZeroConfidence()
+{
+	BNHighLevelILTokenEmitterEndForceZeroConfidence(m_object);
+}
+
+
+HighLevelILTokenEmitter::CurrentExprGuard HighLevelILTokenEmitter::SetCurrentExpr(const HighLevelILInstruction& expr)
+{
+	return CurrentExprGuard(*this, {expr.address, expr.sourceOperand, expr.exprIndex, expr.instructionIndex});
+}
+
+
+void HighLevelILTokenEmitter::Finalize()
+{
+	BNHighLevelILTokenEmitterFinalize(m_object);
+}
+
+
+void HighLevelILTokenEmitter::AppendOpenParen()
+{
+	BNHighLevelILTokenEmitterAppendOpenParen(m_object);
+}
+
+
+void HighLevelILTokenEmitter::AppendCloseParen()
+{
+	BNHighLevelILTokenEmitterAppendCloseParen(m_object);
+}
+
+
+void HighLevelILTokenEmitter::AppendOpenBracket()
+{
+	BNHighLevelILTokenEmitterAppendOpenBracket(m_object);
+}
+
+
+void HighLevelILTokenEmitter::AppendCloseBracket()
+{
+	BNHighLevelILTokenEmitterAppendCloseBracket(m_object);
+}
+
+
+void HighLevelILTokenEmitter::AppendOpenBrace()
+{
+	BNHighLevelILTokenEmitterAppendOpenBrace(m_object);
+}
+
+
+void HighLevelILTokenEmitter::AppendCloseBrace()
+{
+	BNHighLevelILTokenEmitterAppendCloseBrace(m_object);
+}
+
+
+void HighLevelILTokenEmitter::AppendSemicolon()
+{
+	BNHighLevelILTokenEmitterAppendSemicolon(m_object);
+}
+
+
+vector<InstructionTextToken> HighLevelILTokenEmitter::GetCurrentTokens() const
+{
+	size_t count = 0;
+    BNInstructionTextToken* tokens = BNHighLevelILTokenEmitterGetCurrentTokens(m_object, &count);
+	return InstructionTextToken::ConvertAndFreeInstructionTextTokenList(tokens, count);
+}
+
+
+void HighLevelILTokenEmitter::SetBracesRequired(BNBraceRequirement required)
+{
+	BNHighLevelILTokenEmitterSetBracesRequired(m_object, required);
+}
+
+
+void HighLevelILTokenEmitter::SetBracesAroundSwitchCases(bool braces)
+{
+	BNHighLevelILTokenEmitterSetBracesAroundSwitchCases(m_object, braces);
+}
+
+
+void HighLevelILTokenEmitter::SetSimpleScopeAllowed(bool allowed)
+{
+	BNHighLevelILTokenEmitterSetSimpleScopeAllowed(m_object, allowed);
+}
+
+
+vector<DisassemblyTextLine> HighLevelILTokenEmitter::GetLines() const
+{
+    size_t count = 0;
+    BNDisassemblyTextLine* lines = BNHighLevelILTokenEmitterGetLines(m_object, &count);
+
+    vector<DisassemblyTextLine> result;
+	result.reserve(count);
+    for (size_t i = 0; i < count; i++)
+    {
+        DisassemblyTextLine line;
+        line.addr = lines[i].addr;
+        line.instrIndex = lines[i].instrIndex;
+        line.highlight = lines[i].highlight;
+        line.tokens = InstructionTextToken::ConvertInstructionTextTokenList(lines[i].tokens, lines[i].count);
+        line.tags = Tag::ConvertTagList(lines[i].tags, lines[i].tagCount);
+        result.push_back(line);
+    }
+
+    BNFreeDisassemblyTextLines(lines, count);
 	return result;
 }

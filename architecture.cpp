@@ -107,7 +107,7 @@ InstructionTextToken InstructionTextToken::WithConfidence(uint8_t conf)
 }
 
 
-static void ConvertInstructionTextToken(const InstructionTextToken& token, BNInstructionTextToken* result)
+void InstructionTextToken::ConvertInstructionTextToken(const InstructionTextToken& token, BNInstructionTextToken* result)
 {
 	result->type = token.type;
 	result->text = BNAllocString(token.text.c_str());
@@ -144,15 +144,19 @@ BNInstructionTextToken* InstructionTextToken::CreateInstructionTextTokenList(con
 }
 
 
+void InstructionTextToken::FreeInstructionTextToken(BNInstructionTextToken* token)
+{
+	BNFreeString(token->text);
+	for (size_t j = 0; j < token->namesCount; j++)
+		BNFreeString(token->typeNames[j]);
+	delete[] token->typeNames;
+}
+
+
 void InstructionTextToken::FreeInstructionTextTokenList(BNInstructionTextToken* tokens, size_t count)
 {
 	for (size_t i = 0; i < count; i++)
-	{
-		BNFreeString(tokens[i].text);
-		for (size_t j = 0; j < tokens[i].namesCount; j++)
-			BNFreeString(tokens[i].typeNames[j]);
-		delete[] tokens[i].typeNames;
-	}
+		FreeInstructionTextToken(&tokens[i]);
 	delete[] tokens;
 }
 
@@ -2527,6 +2531,24 @@ bool DisassemblyTextRenderer::AddSymbolToken(
 }
 
 
+BNSymbolDisplayResult DisassemblyTextRenderer::AddSymbolTokenStatic(
+	std::vector<InstructionTextToken>& tokens, uint64_t addr, size_t size, size_t operand,
+	BinaryView* data, size_t maxSymbolWidth, Function* func, uint8_t confidence,
+	BNSymbolDisplayType symbolDisplay, BNOperatorPrecedence precedence, uint64_t instrAddr, uint64_t exprIndex)
+{
+	BNInstructionTextToken* result = nullptr;
+	size_t count = 0;
+	BNSymbolDisplayResult display = BNGetDisassemblyTextRendererSymbolTokensStatic(
+		addr, size, operand, data ? data->GetObject() : nullptr,
+		maxSymbolWidth, func ? func->GetObject() : nullptr, confidence, symbolDisplay, precedence,
+		instrAddr, exprIndex, &result, &count);
+	vector<InstructionTextToken> newTokens =
+		InstructionTextToken::ConvertAndFreeInstructionTextTokenList(result, count);
+	tokens.insert(tokens.end(), newTokens.begin(), newTokens.end());
+	return display;
+}
+
+
 void DisassemblyTextRenderer::AddStackVariableReferenceTokens(
     vector<InstructionTextToken>& tokens, const StackVariableReference& ref)
 {
@@ -2560,7 +2582,7 @@ void DisassemblyTextRenderer::AddIntegerToken(
     vector<InstructionTextToken>& tokens, const InstructionTextToken& token, Architecture* arch, uint64_t addr)
 {
 	BNInstructionTextToken inToken;
-	ConvertInstructionTextToken(token, &inToken);
+	InstructionTextToken::ConvertInstructionTextToken(token, &inToken);
 
 	size_t count = 0;
 	BNInstructionTextToken* result =
@@ -2605,4 +2627,71 @@ void DisassemblyTextRenderer::WrapComment(DisassemblyTextLine& line, vector<Disa
 
 	BNFreeDisassemblyTextLines(result, count);
 	BNFreeInstructionText(inLine.tokens, inLine.count);
+}
+
+
+string DisassemblyTextRenderer::GetStringLiteralPrefix(BNStringType type)
+{
+	char* prefix = BNGetStringLiteralPrefix(type);
+	string result = prefix;
+	BNFreeString(prefix);
+	return result;
+}
+
+
+FunctionViewType::FunctionViewType(BNFunctionGraphType viewType) : type(viewType)
+{
+	if (type == HighLevelLanguageRepresentationFunctionGraph)
+		name = "Pseudo C";
+}
+
+
+FunctionViewType::FunctionViewType(const BNFunctionViewType& viewType) : type(viewType.type)
+{
+	if (type == HighLevelLanguageRepresentationFunctionGraph)
+	{
+		if (viewType.name)
+			name = viewType.name;
+		else
+			name = "Pseudo C";
+	}
+}
+
+
+BNFunctionViewType FunctionViewType::ToAPIObject() const
+{
+	BNFunctionViewType result;
+	result.type = type;
+	result.name = nullptr;
+	if (type == HighLevelLanguageRepresentationFunctionGraph)
+		result.name = name.c_str();
+	return result;
+}
+
+
+BNFunctionGraphType FunctionViewType::GetBackingILType() const
+{
+	if (type == HighLevelLanguageRepresentationFunctionGraph)
+		return HighLevelILFunctionGraph;
+	return type;
+}
+
+
+bool FunctionViewType::operator==(const FunctionViewType& other) const
+{
+	if (type != other.type)
+	    return false;
+	if (type != HighLevelLanguageRepresentationFunctionGraph)
+		return true;
+	return name == other.name;
+}
+
+
+bool FunctionViewType::operator!=(const FunctionViewType& other) const
+{
+	if (type != other.type)
+	    return true;
+	if (type != HighLevelLanguageRepresentationFunctionGraph)
+		return false;
+	return name != other.name;
 }

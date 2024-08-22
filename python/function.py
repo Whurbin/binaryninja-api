@@ -76,6 +76,7 @@ ILFunctionType = Union['lowlevelil.LowLevelILFunction', 'mediumlevelil.MediumLev
 ILInstructionType = Union['lowlevelil.LowLevelILInstruction', 'mediumlevelil.MediumLevelILInstruction',
                           'highlevelil.HighLevelILInstruction']
 StringOrType = Union[str, 'types.Type', 'types.TypeBuilder']
+FunctionViewTypeOrName = Union['FunctionViewType', FunctionGraphType, str]
 
 
 def _function_name_():
@@ -179,6 +180,39 @@ class VariableReferenceSource:
 
 	def __repr__(self):
 		return f"<var: {repr(self.var)}, src: {repr(self.src)}>"
+
+
+@dataclass
+class FunctionViewType:
+	view_type: FunctionGraphType
+	name: Optional[str]
+
+	def __init__(self, view_type: FunctionViewTypeOrName):
+		if isinstance(view_type, FunctionViewType):
+			self.view_type = view_type.view_type
+			self.name = view_type.name
+		if isinstance(view_type, FunctionGraphType):
+			self.view_type = view_type
+			self.name = None
+		else:
+			self.view_type = FunctionGraphType.HighLevelLanguageRepresentationFunctionGraph
+			self.name = str(view_type)
+
+	@staticmethod
+	def _from_core_struct(view_type: core.BNFunctionViewType) -> 'FunctionViewType':
+		if view_type.type == FunctionGraphType.HighLevelLanguageRepresentationFunctionGraph:
+			if view_type.name is None:
+				return FunctionViewType("Pseudo C")
+			else:
+				return FunctionViewType(view_type.name)
+		else:
+			return FunctionViewType(view_type.type)
+
+	def _to_core_struct(self) -> core.BNFunctionViewType:
+		result = core.BNFunctionViewType()
+		result.type = self.view_type
+		result.name = self.name
+		return result
 
 
 class BasicBlockList:
@@ -1787,7 +1821,7 @@ class Function:
 			core.BNFreeILInstructionList(exits)
 
 	def get_constant_data(self, state: RegisterValueType, value: int, size: int = 0) -> databuffer.DataBuffer:
-		return databuffer.DataBuffer(handle=core.BNGetConstantData(self.handle, state, value, size))
+		return databuffer.DataBuffer(handle=core.BNGetConstantData(self.handle, state, value, size, None))
 
 	def get_reg_value_at(
 	    self, addr: int, reg: 'architecture.RegisterType', arch: Optional['architecture.Architecture'] = None
@@ -2078,13 +2112,14 @@ class Function:
 		return result
 
 	def create_graph(
-	    self, graph_type: FunctionGraphType = FunctionGraphType.NormalFunctionGraph,
+	    self, graph_type: FunctionViewTypeOrName = FunctionGraphType.NormalFunctionGraph,
 	    settings: Optional['DisassemblySettings'] = None
 	) -> flowgraph.CoreFlowGraph:
 		if settings is not None:
 			settings_obj = settings.handle
 		else:
 			settings_obj = None
+		graph_type = FunctionViewType(graph_type)._to_core_struct()
 		return flowgraph.CoreFlowGraph(core.BNCreateFunctionGraph(self.handle, graph_type, settings_obj))
 
 	def apply_imported_types(self, sym: 'types.CoreSymbol', type: Optional[StringOrType] = None) -> None:
