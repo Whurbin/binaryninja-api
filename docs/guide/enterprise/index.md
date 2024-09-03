@@ -1,20 +1,20 @@
 # Binary Ninja Enterprise
 
 !!! note
-    This section only applies to the `Enterprise` edition of Binary Ninja.
+    This section only applies to the Ultimate edition of Binary Ninja.
 
-The Enterprise edition of Binary Ninja seamlessly integrates remote collaboration functionality within the client. This includes remote project management, push/pull of analysis database and type archive snapshots, real-time chat, and more.
+The Ultimate edition of Binary Ninja seamlessly integrates remote collaboration functionality, provided by the Binary Ninja Enterprise server, within the client. This includes remote project management, push/pull of analysis database and type archive snapshots, real-time chat, and more.
 
 
 ## Licensing
 
-Opening your Enterprise client for the first time, you will be greeted by the following dialog:
+Starting Ultimate for the first time, you will be greeted by the following dialog:
 
 ![License Dialog](../../img/enterprise/license-dialog.png){: style="max-width:500px; display: block; margin: auto;"}
 
-If you have a *named* license, your experience should be identical to that of a Commercial client (with extra features). Click the "Used Named License..." button and select the `license.dat` that was provided when you purchased your license. This will be placed in your [user folder](../index.md#user-folder).
+If you have a *named* license, your experience should be identical to that of a Commercial edition build, but with the additional features of Ultimate. Click the "Used Named License..." button and select the `license.dat` that was provided when you purchased your license. This will be placed in your [user folder](../index.md#user-folder).
 
-Otherwise, the Enterprise client will need to check out a *floating* license from your Enterprise server. Enter your server location into the box and click "Connect". (All connections should happen over HTTPS and the default port is 3535.)
+Otherwise, you will need to check out a *floating* license from your Enterprise server. Enter your server location into the box and click "Connect". (All connections should happen over HTTPS and the default port is 3535.)
 
 ## Authentication
 
@@ -29,15 +29,15 @@ This dialog will have up to 5 fields:
 * **Username**: This text box contains your username if you are logging in with an Enterprise server account (hidden if using SSO).
 * **Password**: This text box contains your password if you are logging in with an Enterprise server account (hidden if using SSO).
 * **Remember Me**: This checkbox will remember the settings you choose and try to log you in the same way in the future.
-* **Checkout Duration**: This drop-down provides a selection of license durations. The default is "Until I Quit", which will refresh your license every 15 minutes until you quit the Enterprise client.
+* **Checkout Duration**: This drop-down provides a selection of license durations. The default is "Until I Quit", which will refresh your license every 15 minutes until you quit Binary Ninja.
 
 ## Configuration
 
-The Enterprise client has a number of settings that let you change its behavior. These settings can be found in the main Settings window (`Edit -> Preferences`) within Binary Ninja. See the [Settings](../settings.md) documentation for more details.
+Binary Ninja has a number of settings that let you change how it connects to and uses the Enterprise server. These settings can be found in the main Settings window (`Edit -> Preferences`) within Binary Ninja. See the [Settings](../settings.md) documentation for more details.
 
 ## User Interface
 
-The Enterprise edition of Binary Ninja adds a few extra items in the user interface. These include:
+The Ultimate edition of Binary Ninja adds a few extra items in the user interface. These include:
 
 * An extra [status indicator](#status-indicator) in the status bar
 * The [Remote Dialog](#remote-dialog)
